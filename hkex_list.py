@@ -3,18 +3,16 @@ Module to retrieve a list of company information
 '''
 # core modules
 import re
-from logutil import getLogger
+import logutil
 
 # modules for downloading and URL
-from urllib.request import urlopen
-from urllib.error import HTTPError, URLError
 from bs4 import BeautifulSoup
-from socket import timeout
-from webutil import create_web_request, get_random_proxy
+from requests.exceptions import RequestException, Timeout
+import webutil
 
 # modules for Data Science
 import pandas as pd
-from excelutil import save_excel_base64, save_excel_file
+import excelutil
 
 # modules for concurrency
 import time
@@ -56,26 +54,36 @@ def download_stock_list(
     hkex_list_tr_class_list = ["ms-rteTableOddRow-BlueTable_CHI", "ms-rteTableEvenRow-BlueTable_CHI"]
     
     # Section of downloading stock list
-    logger = getLogger(__name__)
+    logger = logutil.getLogger(__name__)
     logger.info('It starts to download stock list. Please wait.')
     tr_list = []
     for _ in range(retry_time):
         try:
             proxy_server = None
             if proxy_flag:
-                proxy_server = get_random_proxy()
+                proxy_server = webutil.get_random_proxy()
                 logger.info('download via a proxy server: %s', proxy_server['ip'] + ':' + proxy_server['port'])
-            with urlopen(create_web_request(url=hkex_list_url, proxy_server=proxy_server)) as page:
-                # Create a BeautifulSoup object
-                soup = BeautifulSoup(page.read().decode('utf-8', 'ignore'), 'html.parser')
-                # Search by CSS Selector
-                tr_list = soup.findAll("tr", {"class": hkex_list_tr_class_list})
+
+            response = webutil.create_get_request(url=hkex_list_url, proxy_server=proxy_server)
+            if response.status_code != 200:
+                response.raise_for_status()
+            decoded_result = response.content.decode('utf-8', 'ignore')
+            if len(decoded_result) <= 0:
+                logger.error('Failed to retrieve content.')
+                continue                
+            # Create a BeautifulSoup object
+            soup = BeautifulSoup(decoded_result, 'html.parser')
+            # Search by CSS Selector
+            tr_list = soup.findAll("tr", {"class": hkex_list_tr_class_list})
             break
-        except (HTTPError, URLError) as error:
+        except Timeout:
+            logger.error('socket timed out - URL %s', hkex_list_url)
+            time.sleep(retry_delay)
+        except RequestException as error:
             logger.error('Data not retrieved because %s\nURL: %s', error, hkex_list_url)
             time.sleep(retry_delay)
-        except timeout:
-            logger.error('socket timed out - URL %s', hkex_list_url)
+        except Exception as error:
+            logger.error('Unexpected error of %s\nURL: %s', error, hkex_list_url)
             time.sleep(retry_delay)
     else:
         logger.error('No response after %d retry.' % retry_time)
@@ -92,14 +100,14 @@ def download_stocks_df(proxy_flag=False):
 def save_excel_base64(
     df
     , sheetname='hkex_stocks'):
-    return save_excel_base64(df, sheetname)
+    return excelutil.save_excel_base64(df, sheetname)
 
 # Convert DataFrame to Excel in File
 def save_excel_file(
     df
     , filepath=DEFAULT_EXCEL_FILENAME
     , sheetname='hkex_stocks'):
-    save_excel_file(df, filepath, sheetname)
+    excelutil.save_excel_file(df, filepath, sheetname)
 
 # init stock list database by downloading
 def init_stock_list(filepath=DEFAULT_EXCEL_FILENAME, proxy_flag=False):
@@ -115,4 +123,4 @@ def read_stock_list(filepath=DEFAULT_EXCEL_FILENAME, sheetname='hkex_stocks'):
 
 ### Run as a main program ###
 if __name__ == '__main__':
-    print(download_stocks_df(proxy_flag=False).to_csv(columns=['stock_id', 'chi_name', 'url'], index=True, sep='\t'))
+    print(download_stocks_df(proxy_flag=True).to_csv(columns=['stock_id', 'chi_name', 'url'], index=True, sep='\t'))
