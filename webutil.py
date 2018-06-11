@@ -52,3 +52,15 @@ def create_web_request(
     web_req.add_header('User-Agent', user_agent)
     web_req.add_header('referer', referer)
     return web_req
+
+def create_default_request(url, proxy_server = None):
+    USER_AGENT = 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:54.0) Gecko/20100101 Firefox/54.0'
+    REFERER = 'http://www.google.com'
+    headers = {
+        'User-Agent': USER_AGENT
+        , 'referer': REFERER
+    }
+    web_req = Request(url = url, headers = headers)
+    if proxy_server is not None:
+        web_req.set_proxy(proxy_server['ip'] + ':' + proxy_server['port'], 'http')
+    return web_req

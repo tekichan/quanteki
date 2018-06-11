@@ -4,6 +4,7 @@ Module to retrieve company information from Bloomberg
 # core modules
 import re
 import logutil
+import sys
 
 # modules for downloading and URL
 from urllib.request import urlopen
@@ -38,7 +39,9 @@ def download_bloomberg_quote(
                 proxy_server = webutil.get_random_proxy()
                 logger.info('download via a proxy server: %s', proxy_server['ip'] + ':' + proxy_server['port'])
 
-            with urlopen(webutil.create_web_request(url=data_url, proxy_server=proxy_server)) as stock_page:
+            web_request = webutil.create_web_request(url=data_url, proxy_server=proxy_server)
+            print(web_request.header_items())
+            with urlopen(web_request) as stock_page:
                 decoded_result = stock_page.read().decode('utf-8', 'ignore')
                 if len(decoded_result) <= 0:
                     logger.error('Failed to retrieve content.')
@@ -130,4 +133,4 @@ def download_bloomberg_df(
 
 ### Run as a main program ###
 if __name__ == '__main__':
-    print(download_bloomberg_df(stock_id_list=[603, 1988], max_workers=1, proxy_flag=False).to_csv(index=True, sep='\t'))
+    print(download_bloomberg_df(stock_id_list=[stock_id for stock_id in sys.argv[1:]], max_workers=1, proxy_flag=False).to_csv(index=True, sep='\t'))

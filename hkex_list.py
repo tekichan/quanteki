@@ -115,4 +115,4 @@ def read_stock_list(filepath=DEFAULT_EXCEL_FILENAME, sheetname='hkex_stocks'):
 
 ### Run as a main program ###
 if __name__ == '__main__':
-    print(download_stocks_df(proxy_flag=True).to_csv(columns=['stock_id', 'chi_name', 'url'], index=True, sep='\t'))
+    print(download_stocks_df(proxy_flag=False).to_csv(columns=['stock_id', 'chi_name', 'url'], index=True, sep='\t'))
