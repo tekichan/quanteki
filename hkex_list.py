@@ -3,18 +3,18 @@ Module to retrieve a list of company information
 '''
 # core modules
 import re
-import logutil
+from logutil import getLogger
 
 # modules for downloading and URL
 from urllib.request import urlopen
 from urllib.error import HTTPError, URLError
 from bs4 import BeautifulSoup
 from socket import timeout
-import webutil
+from webutil import create_web_request, get_random_proxy
 
 # modules for Data Science
 import pandas as pd
-import excelutil
+from excelutil import save_excel_base64, save_excel_file
 
 # modules for concurrency
 import time
@@ -56,16 +56,16 @@ def download_stock_list(
     hkex_list_tr_class_list = ["ms-rteTableOddRow-BlueTable_CHI", "ms-rteTableEvenRow-BlueTable_CHI"]
     
     # Section of downloading stock list
-    logger = logutil.getLogger(__name__)
+    logger = getLogger(__name__)
     logger.info('It starts to download stock list. Please wait.')
     tr_list = []
     for _ in range(retry_time):
         try:
             proxy_server = None
             if proxy_flag:
-                proxy_server = webutil.get_random_proxy()
+                proxy_server = get_random_proxy()
                 logger.info('download via a proxy server: %s', proxy_server['ip'] + ':' + proxy_server['port'])
-            with urlopen(webutil.create_web_request(url=hkex_list_url, proxy_server=proxy_server)) as page:
+            with urlopen(create_web_request(url=hkex_list_url, proxy_server=proxy_server)) as page:
                 # Create a BeautifulSoup object
                 soup = BeautifulSoup(page.read().decode('utf-8', 'ignore'), 'html.parser')
                 # Search by CSS Selector
@@ -92,14 +92,14 @@ def download_stocks_df(proxy_flag=False):
 def save_excel_base64(
     df
     , sheetname='hkex_stocks'):
-    return excelutil.save_excel_base64(df, sheetname)
+    return save_excel_base64(df, sheetname)
 
 # Convert DataFrame to Excel in File
 def save_excel_file(
     df
     , filepath=DEFAULT_EXCEL_FILENAME
     , sheetname='hkex_stocks'):
-    excelutil.save_excel_file(df, filepath, sheetname)
+    save_excel_file(df, filepath, sheetname)
 
 # init stock list database by downloading
 def init_stock_list(filepath=DEFAULT_EXCEL_FILENAME, proxy_flag=False):
