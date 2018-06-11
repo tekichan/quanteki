@@ -2,46 +2,26 @@
 Module to retrieve a list of company information
 '''
 # core modules
-import logging
 import re
+import logutil
 
 # modules for downloading and URL
-import urllib
+from urllib.request import urlopen
 from urllib.error import HTTPError, URLError
 from bs4 import BeautifulSoup
 from socket import timeout
+import webutil
 
 # modules for Data Science
 import pandas as pd
+import excelutil
 
-# modules for handling files
-import base64
-import io
+# modules for concurrency
+import time
 
 ### Constant Values ###
 DEFAULT_EXCEL_FILENAME = 'stock_list.xlsx'
 HKEXNEWS_URL_CHI = 'http://www.hkexnews.hk/hyperlink/hyperlist_c.HTM'
-
-# Define Logging attributes
-def getLogger(
-    logger_name
-    , logger_level = 'INFO'
-    ):
-    FORMAT = '%(asctime)-15s,%(levelname)s:%(name)s %(message)s'
-    logging.basicConfig(format=FORMAT)
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logger_level)
-    return logger
-
-# Create Response of Web Crawler
-def create_web_response(url):
-    USER_AGENT = 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:54.0) Gecko/20100101 Firefox/54.0'
-    REFERER = 'http://www.google.com'
-    headers = {
-        'User-Agent': USER_AGENT
-        , 'referer': REFERER
-    }
-    return urllib.request.Request(url = url, headers = headers)
 
 # Get Stock Dict from TD tag object crawled
 def get_stock_dict(td_list):
@@ -64,64 +44,67 @@ def get_stock_dict(td_list):
         , 'url': td_list[2].get_text().strip()
     }
 
-# Get Stock List from HKex website and output Triple format    
+# Get Stock List from HKex website and output the list of given processer format    
 def download_stock_list(
         td_processor=get_stock_dict
+        , proxy_flag=False
+        , retry_time=3
+        , retry_delay=10
     ):
     # Define the destination URL
     hkex_list_url = HKEXNEWS_URL_CHI
     hkex_list_tr_class_list = ["ms-rteTableOddRow-BlueTable_CHI", "ms-rteTableEvenRow-BlueTable_CHI"]
     
     # Section of downloading stock list
-    logger = getLogger(__name__)
+    logger = logutil.getLogger(__name__)
     logger.info('It starts to download stock list. Please wait.')
-    try:
-        with urllib.request.urlopen(create_web_response(hkex_list_url)) as page:
-            # Create a BeautifulSoup object
-            soup = BeautifulSoup(page.read().decode('utf-8', 'ignore'), 'html.parser')
-            # Search by CSS Selector
-            tr_list = soup.findAll("tr", {"class": hkex_list_tr_class_list})
-    except (HTTPError, URLError) as error:
-        logger.error('Data not retrieved because %s\nURL: %s', error, hkex_list_url)
-    except timeout:
-        logger.error('socket timed out - URL %s', hkex_list_url)
-    logger.info('Downloading stock list completed.')
+    tr_list = []
+    for _ in range(retry_time):
+        try:
+            proxy_server = None
+            if proxy_flag:
+                proxy_server = webutil.get_random_proxy()
+                logger.info('download via a proxy server: %s', proxy_server['ip'] + ':' + proxy_server['port'])
+            with urlopen(webutil.create_web_request(url=hkex_list_url, proxy_server=proxy_server)) as page:
+                # Create a BeautifulSoup object
+                soup = BeautifulSoup(page.read().decode('utf-8', 'ignore'), 'html.parser')
+                # Search by CSS Selector
+                tr_list = soup.findAll("tr", {"class": hkex_list_tr_class_list})
+            break
+        except (HTTPError, URLError) as error:
+            logger.error('Data not retrieved because %s\nURL: %s', error, hkex_list_url)
+            time.sleep(retry_delay)
+        except timeout:
+            logger.error('socket timed out - URL %s', hkex_list_url)
+            time.sleep(retry_delay)
+    else:
+        logger.error('No response after %d retry.' % retry_time)
+    logger.info('Downloading stock list completed with length of %d.', len(tr_list))
 
     # Prepare list of stock triple from list of table TR objects
     return [td_processor(tr.findAll("td")) for tr in tr_list ]
+
+# Get Stock List from HKex website and output DataFrame format    
+def download_stocks_df(proxy_flag=False):
+    return pd.DataFrame(data=download_stock_list(proxy_flag=proxy_flag)).set_index('stock_id', append=False)
 
 # Convert DataFrame to Excel in Base64 encoding
 def save_excel_base64(
     df
     , sheetname='hkex_stocks'):
-    # Create a Pandas Excel writer using XlsxWriter as the engine.
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, encoding='utf-8', sheet_name=sheetname, index=True)
-        writer.save()
-        xlsx_data = output.getvalue()
-    b64 = base64.b64encode(xlsx_data)
-    return b64.decode('utf-8')
+    return excelutil.save_excel_base64(df, sheetname)
 
 # Convert DataFrame to Excel in File
 def save_excel_file(
     df
     , filepath=DEFAULT_EXCEL_FILENAME
     , sheetname='hkex_stocks'):
-    # Create a Pandas Excel writer using XlsxWriter as the engine.
-    with pd.ExcelWriter(filepath, engine='xlsxwriter') as writer:
-        df.to_excel(writer, encoding='utf-8', sheet_name=sheetname, index=True)
-        writer.save()
+    excelutil.save_excel_file(df, filepath, sheetname)
 
 # init stock list database by downloading
-def init_stock_list(filepath=DEFAULT_EXCEL_FILENAME):
+def init_stock_list(filepath=DEFAULT_EXCEL_FILENAME, proxy_flag=False):
     # Prepare DataFrame object from the list of stock dict
-    save_excel_file(
-        pd.DataFrame(
-            data=download_stock_list()
-        ).set_index('stock_id', append=False)
-        , filepath
-    )
+    save_excel_file(download_stocks_df(proxy_flag=proxy_flag), filepath)
 
 # read stock list database by local Excel
 def read_stock_list(filepath=DEFAULT_EXCEL_FILENAME, sheetname='hkex_stocks'):
@@ -132,4 +115,4 @@ def read_stock_list(filepath=DEFAULT_EXCEL_FILENAME, sheetname='hkex_stocks'):
 
 ### Run as a main program ###
 if __name__ == '__main__':
-    print(read_stock_list().to_csv(columns=['stock_id', 'chi_name', 'url'], index=True, sep='\t'))
+    print(download_stocks_df(proxy_flag=True).to_csv(columns=['stock_id', 'chi_name', 'url'], index=True, sep='\t'))
