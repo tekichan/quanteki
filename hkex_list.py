@@ -20,6 +20,7 @@ import time
 ### Constant Values ###
 DEFAULT_EXCEL_FILENAME = 'stock_list.xlsx'
 HKEXNEWS_URL_CHI = 'http://www.hkexnews.hk/hyperlink/hyperlist_c.HTM'
+PAGE_TIMEOUT = 5.0
 
 # Get Stock Dict from TD tag object crawled
 def get_stock_dict(td_list):
@@ -48,6 +49,7 @@ def download_stock_list(
         , proxy_flag=False
         , retry_time=3
         , retry_delay=10
+        , timeout=PAGE_TIMEOUT
     ):
     # Define the destination URL
     hkex_list_url = HKEXNEWS_URL_CHI
@@ -64,7 +66,7 @@ def download_stock_list(
                 proxy_server = webutil.get_random_proxy()
                 logger.info('download via a proxy server: %s', proxy_server['ip'] + ':' + proxy_server['port'])
 
-            response = webutil.create_get_request(url=hkex_list_url, proxy_server=proxy_server)
+            response = webutil.create_get_request(url=hkex_list_url, proxy_server=proxy_server, timeout=timeout)
             if response.status_code != 200:
                 response.raise_for_status()
             decoded_result = response.content.decode('utf-8', 'ignore')
@@ -93,8 +95,20 @@ def download_stock_list(
     return [td_processor(tr.findAll("td")) for tr in tr_list ]
 
 # Get Stock List from HKex website and output DataFrame format    
-def download_stocks_df(proxy_flag=False):
-    return pd.DataFrame(data=download_stock_list(proxy_flag=proxy_flag)).set_index('stock_id', append=False)
+def download_stocks_df(
+    proxy_flag=False
+    , retry_time=3
+    , retry_delay=10
+    , timeout=PAGE_TIMEOUT    
+):
+    return pd.DataFrame(
+        data=download_stock_list(
+            proxy_flag=proxy_flag
+            , retry_time=retry_time
+            , retry_delay=retry_delay
+            , timeout=timeout
+        )
+    ).set_index('stock_id', append=False)
 
 # Convert DataFrame to Excel in Base64 encoding
 def save_excel_base64(
@@ -110,9 +124,23 @@ def save_excel_file(
     excelutil.save_excel_file(df, filepath, sheetname)
 
 # init stock list database by downloading
-def init_stock_list(filepath=DEFAULT_EXCEL_FILENAME, proxy_flag=False):
+def init_stock_list(
+    filepath=DEFAULT_EXCEL_FILENAME
+    , proxy_flag=False
+    , retry_time=3
+    , retry_delay=10
+    , timeout=PAGE_TIMEOUT    
+):
     # Prepare DataFrame object from the list of stock dict
-    save_excel_file(download_stocks_df(proxy_flag=proxy_flag), filepath)
+    save_excel_file(
+        download_stocks_df(
+            proxy_flag=proxy_flag
+            , retry_time=retry_time
+            , retry_delay=retry_delay
+            , timeout=timeout
+        )
+        , filepath
+    )
 
 # read stock list database by local Excel
 def read_stock_list(filepath=DEFAULT_EXCEL_FILENAME, sheetname='hkex_stocks'):

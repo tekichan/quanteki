@@ -72,7 +72,8 @@ def create_get_request(
     , user_agent = UserAgent().random
     , referer = 'http://www.google.com'
     , cookies = None
-    , proxy_server = None
+    , proxy_server = None    
+    , timeout = None
 ):
     sess = requests.Session()
     if proxy_server is not None:
@@ -84,6 +85,6 @@ def create_get_request(
     }
 
     if cookies is not None:
-        return sess.get(url, cookies=cookies, headers=headers)
+        return sess.get(url, cookies=cookies, headers=headers, timeout=timeout)
     else:
-        return sess.get(url, headers=headers)
+        return sess.get(url, headers=headers, timeout=timeout)

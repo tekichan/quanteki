@@ -33,6 +33,8 @@ LABEL_VOLUME = 'Volume'
 
 YAHOO_DATE_FORMAT = '%Y-%m-%d'
 
+PAGE_TIMEOUT = 5.0
+
 '''
 Functions of Handling Yahoo! Finance Site Cookies
 '''
@@ -49,13 +51,13 @@ def get_cookie_value(res):
     '''
     return {'B': res.cookies['B']}
 
-def get_page_data(stock_id, proxy_server=None):
+def get_page_data(stock_id, proxy_server=None, timeout=None):
     '''
     This function is to get page data include cookie and content lines from given stock page
     '''
     WELCOME_FORMAT = 'https://hk.finance.yahoo.com/quote/{0}/history?p={0}'
     welcome_url = WELCOME_FORMAT.format(stock_id)
-    response = webutil.create_get_request(url = welcome_url, proxy_server=proxy_server)
+    response = webutil.create_get_request(url = welcome_url, proxy_server=proxy_server, timeout=timeout)
     cookie = get_cookie_value(response)
     
     ENCODING = 'unicode-escape'
@@ -80,11 +82,11 @@ def split_crumb_store(value):
     '''
     return value.split(':')[2].strip('"')
 
-def get_cookie_crumb(stock_id, proxy_server=None):
+def get_cookie_crumb(stock_id, proxy_server=None, timeout=None):
     '''
     This function is to retrieve cookie and crumb values
     '''
-    cookie, lines = get_page_data(stock_id, proxy_server=proxy_server)
+    cookie, lines = get_page_data(stock_id, proxy_server=proxy_server, timeout=timeout)
     crumb = split_crumb_store(find_crumb_store(lines))
     return cookie, crumb
 
@@ -97,6 +99,7 @@ def download_yahoo_hist(
     , proxy_flag=False
     , retry_time=3
     , retry_delay=10
+    , timeout=PAGE_TIMEOUT
 ):
     '''
     This function is to download historical stock prices from Yahoo! Finance.
@@ -131,10 +134,10 @@ def download_yahoo_hist(
                 proxy_server = webutil.get_random_proxy()
                 logger.info('download via a proxy server: %s', proxy_server['ip'] + ':' + proxy_server['port'])
 
-            cookie, crumb = get_cookie_crumb(stock_code, proxy_server=proxy_server)
+            cookie, crumb = get_cookie_crumb(stock_code, proxy_server=proxy_server, timeout=timeout)
             csv_url = CSV_FORMAT.format(stock_code, from_timestamp, to_timestamp, crumb)
 
-            response = webutil.create_get_request(url=csv_url, cookies=cookie, proxy_server=proxy_server)            
+            response = webutil.create_get_request(url=csv_url, cookies=cookie, proxy_server=proxy_server, timeout=timeout)            
             if response.status_code != 200:
                 response.raise_for_status()
             else:
@@ -178,6 +181,7 @@ def get_stock_quote(
     , proxy_flag=False
     , retry_time=3
     , retry_delay=10
+    , timeout=PAGE_TIMEOUT
     ):
     '''
     Get stock quote in format of dictionary by a given stock Code
@@ -208,7 +212,7 @@ def get_stock_quote(
                 proxy_server = webutil.get_random_proxy()
                 logger.info('download via a proxy server: %s', proxy_server['ip'] + ':' + proxy_server['port'])
 
-            response = webutil.create_get_request(url=stock_url, proxy_server=proxy_server)
+            response = webutil.create_get_request(url=stock_url, proxy_server=proxy_server, timeout=timeout)
             if response.status_code != 200:
                 response.raise_for_status()
             stock_page = response.content.decode('utf-8', 'ignore')
@@ -239,7 +243,7 @@ def get_stock_quote(
 
 # Get Stock Quote Data Frame by Stock List
 def get_stock_quote_df(
-    stock_id_list
+    stock_code_list
     , max_workers=10
     , proxy_flag=False
     ):
@@ -249,13 +253,13 @@ def get_stock_quote_df(
     # Threads start and it takes quite a long time due to multiple network I/O
     logger.info('It starts to download stock quotes. Please wait.')
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_stock_id = {
-            executor.submit(get_stock_quote, get_hk_yahoo_code(stock_id), proxy_flag): 
-            stock_id for stock_id in stock_id_list
+        future_to_stock_code = {
+            executor.submit(get_stock_quote, stock_code, proxy_flag): 
+            stock_code for stock_code in stock_code_list
         }
 
     # Update thread status for monitoring
-    for future in concurrent.futures.as_completed(future_to_stock_id):
+    for future in concurrent.futures.as_completed(future_to_stock_code):
         stock_quote_list.append(future.result())
     
     logger.info('Downloading stock quotes completed.')
@@ -265,5 +269,5 @@ def get_stock_quote_df(
 
 ### Run as a main program ###
 if __name__ == '__main__':
-    print(get_stock_quote_df(stock_id_list=[int(stock_id) for stock_id in sys.argv[1:]], max_workers=1, proxy_flag=True).to_csv(index=True, sep='\t'))    
+    print(get_stock_quote_df(stock_code_list=[stock_code for stock_code in sys.argv[1:]], max_workers=1, proxy_flag=True).to_csv(index=True, sep='\t'))    
     # print(download_yahoo_hist(stock_code=sys.argv[1], proxy_flag=True).to_csv(index=True, sep='\t'))

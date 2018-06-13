@@ -20,16 +20,26 @@ import concurrent.futures
 import time
 from datetime import datetime
 
+### Constant Values ###
+PAGE_TIMEOUT = 5.0
+
+def get_hk_bloomberg_code(stock_number):
+    '''
+    This function is to convert HKex Stock ID in Bloomberg format
+    '''
+    return '{}:HK'.format(stock_number)
+
 def download_bloomberg_quote(
-    stock_id
+    stock_code
     , proxy_flag=False
     , retry_time=3
     , retry_delay=10
+    , timeout=PAGE_TIMEOUT
     ):
     logger = logutil.getLogger(__name__)
 
-    data_dict = {'stock_id':stock_id}
-    data_url = 'https://www.bloomberg.com/quote/{}:HK'.format(stock_id)
+    data_dict = {'stock_code':stock_code}
+    data_url = 'https://www.bloomberg.com/quote/{}'.format(stock_code)
     for _ in range(retry_time):
         try:
             proxy_server = None
@@ -37,7 +47,7 @@ def download_bloomberg_quote(
                 proxy_server = webutil.get_random_proxy()
                 logger.info('download via a proxy server: %s', proxy_server['ip'] + ':' + proxy_server['port'])
 
-            response = webutil.create_get_request(url=data_url, proxy_server=proxy_server)
+            response = webutil.create_get_request(url=data_url, proxy_server=proxy_server, timeout=timeout)
             if response.status_code != 200:
                 response.raise_for_status()
             decoded_result = response.content.decode('utf-8', 'ignore')
@@ -146,7 +156,7 @@ def download_bloomberg_quote(
     return data_dict
 
 def download_bloomberg_df(
-    stock_id_list
+    stock_code_list
     , max_workers=10
     , proxy_flag=False
     ):
@@ -156,20 +166,20 @@ def download_bloomberg_df(
     # Threads start and it takes quite a long time due to multiple network I/O
     logger.info('It starts to download stock quotes. Please wait.')
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_stock_id = {
-            executor.submit(download_bloomberg_quote, stock_id, proxy_flag): 
-            stock_id for stock_id in stock_id_list
+        future_to_stock_code = {
+            executor.submit(download_bloomberg_quote, stock_code, proxy_flag): 
+            stock_code for stock_code in stock_code_list
         }
 
     # Update thread status for monitoring
-    for future in concurrent.futures.as_completed(future_to_stock_id):
+    for future in concurrent.futures.as_completed(future_to_stock_code):
         stock_quote_list.append(future.result())
     
     logger.info('Downloading stock quotes completed.')
     return pd.DataFrame(
         data=stock_quote_list
-        ).set_index('stock_id', append=False)
+        ).set_index('stock_code', append=False)
 
 ### Run as a main program ###
 if __name__ == '__main__':
-    print(download_bloomberg_df(stock_id_list=[stock_id for stock_id in sys.argv[1:]], max_workers=1, proxy_flag=True).to_csv(index=True, sep='\t'))
+    print(download_bloomberg_df(stock_code_list=[stock_code for stock_code in sys.argv[1:]], max_workers=1, proxy_flag=True).to_csv(index=True, sep='\t'))
