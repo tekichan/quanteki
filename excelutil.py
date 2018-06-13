@@ -16,7 +16,7 @@ LABEL_SAVE_INDEX = 'save_index'
 # Convert DataFrame to Excel in Base64 encoding
 def save_excel_base64(
     df
-    , sheetname
+    , sheetname='Sheet1'
     , save_index=True
 ):
     # Create a Pandas Excel writer using XlsxWriter as the engine.
@@ -31,8 +31,8 @@ def save_excel_base64(
 # Convert DataFrame to Excel in File
 def save_excel_file(
     df
-    , filepath
-    , sheetname
+    , filepath='data.xlsx'
+    , sheetname='Sheet1'
     , save_index=True
 ):
     # Create a Pandas Excel writer using XlsxWriter as the engine.
@@ -71,7 +71,7 @@ def save_multi_worksheet_base64(
 # Convert multiple DataFrame to Excel in File
 def save_multi_worksheet_file(
     list_df = []
-    , filepath
+    , filepath = 'data.xlsx'
 ):
     '''
     This function is to create a downloadable link of an Excel content 
