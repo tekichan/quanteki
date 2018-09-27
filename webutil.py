@@ -24,8 +24,7 @@ def get_proxy_list():
 
     # Save proxies in the array
     for row in proxies_table.tbody.find_all('tr'):
-        if row.find_all('td')[1].string.lower() == '8080' and\
-            row.find_all('td')[4].string.lower() == 'anonymous':
+        if row.find_all('td')[4].string.lower() == 'anonymous':
             proxies.append({
                 'ip':   row.find_all('td')[0].string
                 , 'port': row.find_all('td')[1].string
@@ -35,11 +34,16 @@ def get_proxy_list():
 
 def get_random_proxy(
     proxy_list = get_proxy_list()
+    , port_list = []
 ):
     '''
     Get a Proxy Server randomly from a proxy list
     '''
-    return proxy_list[random.randint(0, len(proxy_list) - 1)]
+    if port_list and len(port_list) > 0:
+        tmp_list = [proxy for proxy in proxy_list if proxy['port'] in port_list]
+        return tmp_list[random.randint(0, len(tmp_list) - 1)]
+    else:
+        return proxy_list[random.randint(0, len(proxy_list) - 1)]
 
 # Create Request of Web Crawler
 def create_web_request(
